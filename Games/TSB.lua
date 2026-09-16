@@ -284,8 +284,8 @@ if prev and type(prev.cleanup) == "function" then
     pcall(prev.cleanup)
 end
 
-local UI_PC = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/UI/DougysUI.lua?t="
-local UI_MOBILE = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/UI/DougysUI_Mobile.lua?t="
+local UI_PC = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/70ee8be/UI/DougysUI.lua?t="
+local UI_MOBILE = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/70ee8be/UI/DougysUI_Mobile.lua?t="
 local UI_URL = (UserInputService.TouchEnabled and UI_MOBILE or UI_PC)
     .. tostring(math.random(1000000, 9999999))
 
