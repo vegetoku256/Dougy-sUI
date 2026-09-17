@@ -72,19 +72,19 @@ end
 local hostGui
 pcall(function()
 	local parent
-	pcall(function()
-		if gethui then
-			parent = gethui()
-		end
-	end)
+	local lp = game:GetService("Players").LocalPlayer
+	parent = lp and (lp:FindFirstChildWhichIsA("PlayerGui") or lp:FindFirstChild("PlayerGui"))
 	if not parent then
 		pcall(function()
 			parent = game:GetService("CoreGui")
 		end)
 	end
 	if not parent then
-		local lp = game:GetService("Players").LocalPlayer
-		parent = lp and lp:FindFirstChild("PlayerGui")
+		pcall(function()
+			if gethui then
+				parent = gethui()
+			end
+		end)
 	end
 	if not parent then
 		return
@@ -110,8 +110,14 @@ env.DOUGYS_UI_MOBILE = mobile
 env._DUI_HOST = hostGui
 if env.__DUI_JOB ~= tostring(game.JobId) then
 	env._DUI_LIB = nil
+	env.__DougysTSB_10449761463 = nil
 	env.__DUI_JOB = tostring(game.JobId)
 end
+pcall(function()
+	env.gethui = function()
+		return hostGui
+	end
+end)
 
 local function nativeReq()
 	local fn
@@ -221,8 +227,5 @@ if mobile then
 	payload = "getgenv().DOUGYS_UI_MOBILE=true\n" .. payload
 	payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
 	payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
-end
-if not isDeny(payload) then
-	getUi()
 end
 return run(payload)
