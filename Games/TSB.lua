@@ -3,17 +3,17 @@
 local LOADER = "https://api.dougys.duckdns.org/loader/JzS9pLWIVJHcRHGNwg_xp3bXTjnfFFN2"
 local UI_PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
 local UI_MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
+local GITHUB = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/main/Games/TSB.lua"
 
-warn("[Dougys] start")
+pcall(function()
+	rconsoleprint("[Dougys] start\n")
+end)
 
 local env = (getgenv and getgenv()) or _G
 env.__DUI_ON_HTTPGET = nil
 env.__DUI_ON_REQ = nil
 pcall(function()
 	if restorefunction then
-		if request then
-			restorefunction(request)
-		end
 		pcall(restorefunction, Instance.new)
 	end
 	if hookfunction then
@@ -24,6 +24,9 @@ pcall(function()
 end)
 
 local function fail(msg)
+	pcall(function()
+		rconsoleprint("[Dougys] " .. tostring(msg) .. "\n")
+	end)
 	warn("[Dougys] " .. tostring(msg))
 	error(tostring(msg))
 end
@@ -242,6 +245,19 @@ local function run(src)
 	return fn()
 end
 
+pcall(function()
+	local qt = queue_on_teleport or queueonteleport or queueteleport
+	if type(qt) ~= "function" then
+		return
+	end
+	local key = tostring(env.script_key or "")
+	qt(string.format(
+		'getgenv().script_key=%q\npcall(function() rconsoleprint("[Dougys] teleport\\n") end)\nlocal q=(syn and syn.request)or(http and http.request)or http_request or request\nlocal r=q({Url="%s?t="..math.random(1,9999999),Method="GET"})\nloadstring((type(r)=="table"and(r.Body or r.body))or r)()',
+		key,
+		GITHUB
+	))
+end)
+
 local loaderSrc = fetch(LOADER)
 local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://api.dougys.duckdns.org"
 local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"')
@@ -266,4 +282,7 @@ if mobile then
 	payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
 warn("[Dougys] running")
+pcall(function()
+	rconsoleprint("[Dougys] running\n")
+end)
 return run(payload)
