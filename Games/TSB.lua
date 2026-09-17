@@ -109,11 +109,12 @@ if type(rawReq) ~= "function" then
     error("TSB: no request()")
 end
 
-local uiSrc
+local uiStub = false
+local STUB = "return getgenv()._DUI_LIB"
 
 local function fetch(u)
-    if uiSrc and isUiUrl(u) then
-        return uiSrc
+    if uiStub and isUiUrl(u) then
+        return STUB
     end
     local ok, res = pcall(rawReq, {
         Url = u,
@@ -134,14 +135,117 @@ local function fetch(u)
     error("TSB: failed to fetch API: " .. tostring(code or "blocked"))
 end
 
+local function revealOurs(parent, moveIfNested)
+    if not parent then
+        return 0
+    end
+    local n = 0
+    local kids = parent:GetChildren()
+    for i = 1, #kids do
+        local child = kids[i]
+        if child:IsA("ScreenGui") and child ~= hostGui then
+            local order = 0
+            pcall(function()
+                order = child.DisplayOrder
+            end)
+            if order >= 500000 then
+                pcall(function()
+                    child.Enabled = true
+                    child.IgnoreGuiInset = true
+                    child.DisplayOrder = 999999
+                end)
+                if moveIfNested and parent:IsA("ScreenGui") then
+                    local sub = child:GetChildren()
+                    for j = 1, #sub do
+                        pcall(function()
+                            sub[j].Parent = hostGui
+                        end)
+                        n = n + 1
+                    end
+                    pcall(function()
+                        child:Destroy()
+                    end)
+                else
+                    n = n + 1
+                end
+            end
+        end
+    end
+    return n
+end
+
+local function adoptUi()
+    local n = 0
+    pcall(function()
+        if gethui then
+            local h = gethui()
+            n = n + revealOurs(h, h and h:IsA("ScreenGui"))
+        end
+    end)
+    pcall(function()
+        n = n + revealOurs(game:GetService("CoreGui"), false)
+    end)
+    pcall(function()
+        local lp = game:GetService("Players").LocalPlayer
+        n = n + revealOurs(lp and lp:FindFirstChild("PlayerGui"), false)
+    end)
+    return n
+end
+
 local function getUi()
-    if good(uiSrc) then
-        return uiSrc
+    if uiStub then
+        return STUB
     end
     status("MOBILE | fetch UI")
-    uiSrc = fetch(mobile and UI_MOBILE or UI_PC)
-    status((mobile and "MOBILE | UI " or "PC | UI ") .. tostring(#uiSrc) .. "b")
-    return uiSrc
+    local src = fetch(mobile and UI_MOBILE or UI_PC)
+    status((mobile and "MOBILE | UI " or "PC | UI ") .. tostring(#src) .. "b")
+    local ws = string.find(src, 'if type(__lr_lib) == "table" then', 1, true)
+    if ws then
+        src = string.sub(src, 1, ws - 1) .. "\nreturn __lr_lib\n"
+        status("MOBILE | stripped wrap")
+    end
+    status("MOBILE | compiling UI")
+    local fn, err = loadstring(src, "DougysUI")
+    src = nil
+    if not fn then
+        status("MOBILE | UI compile: " .. tostring(err))
+        error(err)
+    end
+    status("MOBILE | UI lib")
+    local ok, lib = pcall(fn)
+    if not ok or type(lib) ~= "table" or type(lib.CreateWindow) ~= "function" then
+        status("MOBILE | UI run: " .. tostring(lib))
+        error(lib)
+    end
+    local orig = lib.CreateWindow
+    lib.CreateWindow = function(self, cfg)
+        status("MOBILE | CreateWindow")
+        pcall(function()
+            local m = Instance.new("Frame")
+            m.Size = UDim2.fromOffset(72, 72)
+            m.Position = UDim2.fromOffset(8, 80)
+            m.BackgroundColor3 = Color3.fromRGB(0, 200, 80)
+            m.BorderSizePixel = 0
+            m.ZIndex = 9999
+            m.Parent = hostGui
+        end)
+        local okw, win = pcall(orig, self, cfg)
+        if not okw then
+            status("MOBILE | CW ERR: " .. tostring(win))
+            error(win)
+        end
+        local n = 0
+        pcall(function()
+            n = adoptUi()
+        end)
+        status("MOBILE | CW OK adopted " .. tostring(n))
+        return win
+    end
+    if getgenv then
+        getgenv()._DUI_LIB = lib
+    end
+    uiStub = true
+    return STUB
 end
 
 local function hookedReq(opts, ...)
@@ -216,63 +320,6 @@ local function run(src)
     return res
 end
 
-local function revealOurs(parent, moveIfNested)
-    if not parent then
-        return 0
-    end
-    local n = 0
-    local kids = parent:GetChildren()
-    for i = 1, #kids do
-        local child = kids[i]
-        if child:IsA("ScreenGui") and child ~= hostGui then
-            local order = 0
-            pcall(function()
-                order = child.DisplayOrder
-            end)
-            if order >= 500000 then
-                pcall(function()
-                    child.Enabled = true
-                    child.IgnoreGuiInset = true
-                    child.DisplayOrder = 999999
-                end)
-                if moveIfNested and parent:IsA("ScreenGui") then
-                    local sub = child:GetChildren()
-                    for j = 1, #sub do
-                        pcall(function()
-                            sub[j].Parent = hostGui
-                        end)
-                        n = n + 1
-                    end
-                    pcall(function()
-                        child:Destroy()
-                    end)
-                else
-                    n = n + 1
-                end
-            end
-        end
-    end
-    return n
-end
-
-local function adoptUi()
-    local n = 0
-    pcall(function()
-        if gethui then
-            local h = gethui()
-            n = n + revealOurs(h, h and h:IsA("ScreenGui"))
-        end
-    end)
-    pcall(function()
-        n = n + revealOurs(game:GetService("CoreGui"), false)
-    end)
-    pcall(function()
-        local lp = game:GetService("Players").LocalPlayer
-        n = n + revealOurs(lp and lp:FindFirstChild("PlayerGui"), false)
-    end)
-    return n
-end
-
 status("MOBILE | fetch loader")
 local loaderSrc = fetch(LOADER)
 local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://api.dougys.duckdns.org"
@@ -280,8 +327,9 @@ local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"')
 local ch = loaderSrc:match('CHALLENGE%s*=%s*"([^"]+)"')
 if not eid or not ch then
     status("MOBILE | run loader")
+    getUi()
     local result = run(loaderSrc)
-    status("MOBILE | adopted " .. tostring(adoptUi()))
+    status("MOBILE | done adopted " .. tostring(adoptUi()))
     return result
 end
 
@@ -298,7 +346,9 @@ if mobile then
     payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
     payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
-status("MOBILE | run payload " .. tostring(#payload) .. "b")
+status("MOBILE | preload UI")
+getUi()
+status("MOBILE | TSB")
 local result = run(payload)
-status("MOBILE | adopted " .. tostring(adoptUi()))
+status("MOBILE | done adopted " .. tostring(adoptUi()))
 return result
