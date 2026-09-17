@@ -134,6 +134,9 @@ pcall(function()
     g.IgnoreGuiInset = true
     g.DisplayOrder = 2147483647
     g.Parent = parent
+    if getgenv then
+        getgenv()._DUI_HOST = g
+    end
     statusLbl = Instance.new("TextLabel")
     statusLbl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     statusLbl.BackgroundTransparency = 0.1
@@ -156,24 +159,28 @@ local function patchUi(src)
     src = "do local c=math.clamp function math.clamp(x,a,b) if type(a)=='number' and type(b)=='number' and a>b then a,b=b,a end return c(x,a,b) end end\n" .. src
     src = string.gsub(src, "math.max%(1, vp%.X %- inset%.X%)", "math.max(160, vp.X - inset.X)", 1)
     src = string.gsub(src, "math.max%(1, vp%.Y %- inset%.Y%)", "math.max(160, vp.Y - inset.Y)", 1)
+    src = string.gsub(
+        src,
+        'if child:IsA("ScreenGui") and child ~= keepGui then',
+        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "DougysUiKind" then',
+        1
+    )
     local hide = "if showSplash then\n        shell.Visible = false\n    end"
     local a, b = string.find(src, hide, 1, true)
     if a then
         src = string.sub(src, 1, a - 1) .. string.sub(src, b + 1)
     end
-    local needle = "return __lr_lib"
-    local last
-    local pos = 1
-    while true do
-        local s = string.find(src, needle, pos, true)
-        if not s then
-            break
-        end
-        last = s
-        pos = s + 1
+    local oldGui = "    local gui = create(\"ScreenGui\", {\n        Name = StealthNames.gui .. \"_\" .. generateRandomName(4), -- Random name to avoid detection\n        IgnoreGuiInset = true,\n        ResetOnSpawn = false,\n        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,\n        DisplayOrder = math.random(900000, 999999), -- Randomize display order\n        Parent = StealthParent\n    })"
+    local newGui = "    local gui\n    do\n        local host = (getgenv and getgenv()._DUI_HOST) or StealthParent\n        if host and host:IsA(\"ScreenGui\") then\n            gui = create(\"Frame\", {\n                Name = StealthNames.gui .. \"_\" .. generateRandomName(4),\n                BackgroundTransparency = 1,\n                BorderSizePixel = 0,\n                Size = UDim2.fromScale(1, 1),\n                Parent = host\n            })\n        else\n            gui = create(\"ScreenGui\", {\n                Name = StealthNames.gui .. \"_\" .. generateRandomName(4),\n                IgnoreGuiInset = true,\n                ResetOnSpawn = false,\n                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,\n                DisplayOrder = 2147483646,\n                Parent = host or StealthParent\n            })\n        end\n    end"
+    local ga, gb = string.find(src, oldGui, 1, true)
+    if ga then
+        src = string.sub(src, 1, ga - 1) .. newGui .. string.sub(src, gb + 1)
     end
-    if last then
-        src = string.sub(src, 1, last - 1) .. [[
+    local ws = string.find(src, 'if type(__lr_lib) == "table" then', 1, true)
+    if ws then
+        src = string.sub(src, 1, ws - 1)
+    end
+    src = src .. [[
 do
   local lib = __lr_lib
   if type(lib) == "table" and type(lib.CreateWindow) == "function" then
@@ -191,8 +198,8 @@ do
     end
   end
 end
-return __lr_lib]] .. string.sub(src, last + #needle)
-    end
+return __lr_lib
+]]
     return src
 end
 
@@ -248,9 +255,17 @@ pcall(function()
     end
 end)
 pcall(function()
+    if hookfunction and http and type(http.request) == "function" then
+        hookfunction(http.request, reqHook)
+    end
+end)
+pcall(function()
     if getgenv then
         getgenv().request = reqHook
         getgenv().http_request = reqHook
+        if http then
+            http.request = reqHook
+        end
     end
 end)
 
@@ -329,5 +344,12 @@ if mobile then
 end
 status("run payload " .. tostring(#payload) .. "b")
 local result = run(payload)
-status("payload done")
+local kids = 0
+pcall(function()
+    local host = getgenv() and getgenv()._DUI_HOST
+    if host then
+        kids = #host:GetChildren()
+    end
+end)
+status("done hostKids=" .. tostring(kids))
 return result
