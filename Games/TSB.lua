@@ -4,14 +4,29 @@ local LOADER = "https://api.dougys.duckdns.org/loader/JzS9pLWIVJHcRHGNwg_xp3bXTj
 local UI_PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
 local UI_MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
+warn("[Dougys] start")
+
 local env = (getgenv and getgenv()) or _G
 env.__DUI_ON_HTTPGET = nil
 env.__DUI_ON_REQ = nil
 pcall(function()
-	if restorefunction and request then
-		restorefunction(request)
+	if restorefunction then
+		if request then
+			restorefunction(request)
+		end
+		pcall(restorefunction, Instance.new)
+	end
+	if hookfunction then
+		hookfunction(game.IsLoaded, function()
+			return true
+		end)
 	end
 end)
+
+local function fail(msg)
+	warn("[Dougys] " .. tostring(msg))
+	error(tostring(msg))
+end
 
 local function good(src)
 	return type(src) == "string" and #src > 50
@@ -147,25 +162,47 @@ end
 local function fetch(u)
 	local fn = nativeReq()
 	if type(fn) ~= "function" then
-		error("TSB: no request()", 0)
+		fail("no request()")
 	end
-	local ok, res = pcall(fn, {
-		Url = u,
-		Method = "GET",
-		Headers = {
-			["User-Agent"] = "Mozilla/5.0",
-			["Accept"] = "*/*",
-		},
-	})
-	if not ok then
-		error("TSB: request failed: " .. tostring(res), 0)
+	local res, done
+	local function go()
+		local ok, r = pcall(fn, {
+			Url = u,
+			Method = "GET",
+			Headers = {
+				["User-Agent"] = "Mozilla/5.0",
+				["Accept"] = "*/*",
+			},
+		})
+		if ok then
+			res = r
+		else
+			res = { _err = r }
+		end
+		done = true
+	end
+	if task and task.spawn then
+		task.spawn(go)
+		local i = 0
+		while not done and i < 80 do
+			task.wait(0.1)
+			i = i + 1
+		end
+		if not done then
+			fail("API fetch hung")
+		end
+	else
+		go()
+	end
+	if type(res) == "table" and res._err then
+		fail("request failed: " .. tostring(res._err))
 	end
 	local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
 	local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
 	if good(body) and (not code or code == 200) then
 		return body
 	end
-	error("TSB: failed to fetch API: " .. tostring(code or "blocked"), 0)
+	fail("failed to fetch API: " .. tostring(code or "blocked"))
 end
 
 local function prepareUi(src)
@@ -187,11 +224,11 @@ local function getUi()
 		fn, err = loadstring(prepareUi(fetch(UI_PC)), "DougysUI")
 	end
 	if not fn then
-		error("TSB: UI compile failed: " .. tostring(err), 0)
+		fail("UI compile failed: " .. tostring(err))
 	end
 	local ok, lib = pcall(fn)
 	if not ok or type(lib) ~= "table" or type(lib.CreateWindow) ~= "function" then
-		error("TSB: UI run failed: " .. tostring(lib), 0)
+		fail("UI run failed: " .. tostring(lib))
 	end
 	env._DUI_LIB = lib
 	return lib
@@ -200,7 +237,7 @@ end
 local function run(src)
 	local fn, err = loadstring(src, "TSB")
 	if not fn then
-		error("TSB: compile failed: " .. tostring(err), 0)
+		fail("compile failed: " .. tostring(err))
 	end
 	return fn()
 end
@@ -219,7 +256,7 @@ end
 
 local key = env.script_key or _G.script_key or ""
 if key == "" then
-	error("missing script_key", 0)
+	fail("missing script_key")
 end
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
 local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
@@ -228,4 +265,5 @@ if mobile then
 	payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
 	payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
+warn("[Dougys] running")
 return run(payload)
