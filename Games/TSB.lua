@@ -204,12 +204,38 @@ local function getUi()
         src = string.sub(src, 1, ws - 1) .. "\nreturn __lr_lib\n"
         status("MOBILE | stripped wrap")
     end
+    local splitAt = "    return applyBackgroundMode, stopWeather, refreshWeatherIfActive, startAntiAfk, stopAntiAfk, getOpenOverlayTransparency, getOpenOverlayColor, destroyWeatherPools\n    end)()"
+    local sa, sb = string.find(src, splitAt, 1, true)
+    if sa then
+        src = string.sub(src, 1, sb) .. "\n    return (function()\n" .. string.sub(src, sb + 1)
+        local closeAt = "    builtinsComplete = true\n    layoutShell()\n    return window\nend"
+        local ca, cb = string.find(src, closeAt, 1, true)
+        if not ca then
+            closeAt = "    builtinsComplete = true\n    pcall(layoutShell)\n    return window\nend"
+            ca, cb = string.find(src, closeAt, 1, true)
+        end
+        if ca then
+            src = string.sub(src, 1, ca - 1) .. "    builtinsComplete = true\n    pcall(layoutShell)\n    return window\n    end)()\nend" .. string.sub(src, cb + 1)
+            status("MOBILE | split CreateWindow")
+        end
+    end
     status("MOBILE | compiling UI")
     local fn, err = loadstring(src, "DougysUI")
     src = nil
     if not fn then
-        status("MOBILE | UI compile: " .. tostring(err))
-        error(err)
+        status("MOBILE | UI compile fail, trying PC")
+        local pcsrc = fetch(UI_PC)
+        local pws = string.find(pcsrc, 'if type(__lr_lib) == "table" then', 1, true)
+        if pws then
+            pcsrc = string.sub(pcsrc, 1, pws - 1) .. "\nreturn __lr_lib\n"
+        end
+        fn, err = loadstring(pcsrc, "DougysUI")
+        pcsrc = nil
+        if not fn then
+            status("MOBILE | UI compile: " .. tostring(err))
+            error(err)
+        end
+        status("MOBILE | using PC UI")
     end
     status("MOBILE | UI lib")
     local ok, lib = pcall(fn)
