@@ -109,35 +109,60 @@ end
 env.DOUGYS_UI_MOBILE = mobile
 env._DUI_HOST = hostGui
 
--- ponytail: keep the first real request(); later env.request is a Lua wrapper that dies on teleport
-if type(env.__DUI_RAW_REQ) ~= "function" then
-	local found
+-- ponytail: never replace env.request; it survives hops and the Lua wrapper does not
+local job = tostring(game.JobId)
+if env.__DUI_JOB ~= job then
+	env.__DUI_ON_REQ = nil
+	env.__DUI_ON_HTTPGET = nil
+	pcall(function()
+		if restorefunction and request then
+			restorefunction(request)
+		end
+	end)
+	pcall(function()
+		if restorefunction and http_request then
+			restorefunction(http_request)
+		end
+	end)
+	env.__DUI_HF = nil
+	env.__DUI_ORIG_REQUEST = nil
+	env.__DUI_JOB = job
+	env._DUI_LIB = nil
+end
+
+local function nativeReq()
+	local fn
 	pcall(function()
 		if syn then
-			found = syn.request
+			fn = syn.request
 		end
 	end)
 	pcall(function()
-		if type(found) ~= "function" and http then
-			found = http.request
+		if type(fn) ~= "function" and http then
+			fn = http.request
 		end
 	end)
 	pcall(function()
-		if type(found) ~= "function" then
-			found = http_request
+		if type(fn) ~= "function" then
+			fn = fluxus and fluxus.request
 		end
 	end)
 	pcall(function()
-		if type(found) ~= "function" then
-			found = request
+		if type(fn) ~= "function" then
+			fn = env.__DUI_ORIG_REQUEST
 		end
 	end)
-	env.__DUI_RAW_REQ = found
-end
-local rawReq = env.__DUI_RAW_REQ
-if type(rawReq) ~= "function" then
-	warn("TSB: close Roblox fully (not just change server), then execute again")
-	error("TSB: close Roblox fully (not just change server), then execute again", 0)
+	pcall(function()
+		if type(fn) ~= "function" and not env.__DUI_HF then
+			fn = http_request
+		end
+	end)
+	pcall(function()
+		if type(fn) ~= "function" and not env.__DUI_HF then
+			fn = request
+		end
+	end)
+	return fn
 end
 
 local uiStub = false
@@ -152,24 +177,25 @@ local function fetch(u)
 		error("TSB: request loop")
 	end
 	depth = depth + 1
-	local ok, res = pcall(rawReq, {
-		Url = u,
-		Method = "GET",
-		Headers = {
-			["User-Agent"] = "Mozilla/5.0",
-			["Accept"] = "*/*",
-		},
-	})
-	depth = depth - 1
-	if not ok then
-		error("TSB: request failed: " .. tostring(res))
+	local fn = nativeReq()
+	local ok, res = false, nil
+	if type(fn) == "function" then
+		ok, res = pcall(fn, {
+			Url = u,
+			Method = "GET",
+			Headers = {
+				["User-Agent"] = "Mozilla/5.0",
+				["Accept"] = "*/*",
+			},
+		})
 	end
-	local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
-	local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
+	depth = depth - 1
+	local body = ok and type(res) == "table" and (res.Body or res.body) or (ok and type(res) == "string" and res or nil)
+	local code = ok and type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
 	if good(body) and (not code or code == 200) then
 		return body
 	end
-	error("TSB: failed to fetch API: " .. tostring(code or "blocked"))
+	error("TSB: failed to fetch API: " .. tostring(code or res or "blocked"))
 end
 
 local function prepareUi(src)
@@ -231,46 +257,77 @@ local function hookedReq(opts, ...)
 			success = true,
 		}
 	end
-	return rawReq(opts, ...)
+	local fn = nativeReq()
+	return fn(opts, ...)
 end
 
-env.__DUI_HOOK = hookedReq
 env.__DUI_ON_REQ = hookedReq
-if type(env.__DUI_DISPATCH) ~= "function" then
-	env.__DUI_DISPATCH = function(opts, ...)
-		local fn = env.__DUI_ON_REQ
-		if type(fn) == "function" then
-			return fn(opts, ...)
-		end
-		return env.__DUI_RAW_REQ(opts, ...)
+env.__DUI_ON_HTTPGET = function(...)
+	local u = ...
+	if isUiUrl(u) then
+		return getUi()
 	end
+	if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
+		return fetch(u)
+	end
+	error("skip")
 end
-pcall(function()
-	env.request = env.__DUI_DISPATCH
-	env.http_request = env.__DUI_DISPATCH
-end)
 
-if env.__DUI_GAME ~= game then
-	env.__DUI_GAME = game
+if hookfunction and not env.__DUI_HF then
 	pcall(function()
-		if hookmetamethod then
-			local old
-			old = hookmetamethod(game, "__namecall", function(self, ...)
-				local method = getnamecallmethod()
-				if method == "HttpGet" or method == "HttpGetAsync" then
-					local u = ...
-					if isUiUrl(u) then
-						return getUi()
-					end
-					if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
-						return fetch(u)
-					end
-				end
-				return old(self, ...)
-			end)
+		local old
+		old = hookfunction(request, function(...)
+			local fn = env.__DUI_ON_REQ
+			if type(fn) == "function" then
+				return fn(...)
+			end
+			return old(...)
+		end)
+		if type(old) == "function" then
+			env.__DUI_ORIG_REQUEST = old
+			env.__DUI_HF = true
 		end
 	end)
 end
+
+if hookmetamethod and env.__DUI_NC_GAME ~= game then
+	env.__DUI_NC_GAME = game
+	pcall(function()
+		local old
+		old = hookmetamethod(game, "__namecall", function(self, ...)
+			local method = getnamecallmethod()
+			if method == "HttpGet" or method == "HttpGetAsync" then
+				local fn = env.__DUI_ON_HTTPGET
+				if type(fn) == "function" then
+					local ok, result = pcall(fn, ...)
+					if ok then
+						return result
+					end
+				end
+			end
+			return old(self, ...)
+		end)
+	end)
+end
+
+pcall(function()
+	local lp = game:GetService("Players").LocalPlayer
+	if lp and not env.__DUI_TP then
+		env.__DUI_TP = true
+		lp.OnTeleport:Connect(function()
+			env.__DUI_ON_REQ = nil
+			env.__DUI_ON_HTTPGET = nil
+			env.__DUI_JOB = nil
+			pcall(function()
+				if restorefunction and request then
+					restorefunction(request)
+				end
+			end)
+			env.__DUI_HF = nil
+			env.__DUI_ORIG_REQUEST = nil
+		end)
+	end
+end)
 
 local function run(src)
 	local fn, err = loadstring(src, "TSB")
