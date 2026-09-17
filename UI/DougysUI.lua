@@ -117,7 +117,22 @@ if getgenv then
     getgenv().DOUGYS_UI_MOBILE = mobile
 end
 
-local src = fetch(mobile and MOBILE or PC)
+local function hardenUi(src)
+    if type(src) ~= "string" then
+        return src
+    end
+    src = src:gsub(
+        'if child:IsA%("ScreenGui"%) and child ~= keepGui then',
+        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "RobloxGui" and not child:FindFirstChild("Modules") then'
+    )
+    src = src:gsub(
+        'if child:IsA%("ScreenGui"%) and child ~= keepGui and child.Name ~= "DougysUiKind" then',
+        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "DougysUiKind" and child.Name ~= "RobloxGui" and not child:FindFirstChild("Modules") then'
+    )
+    return src
+end
+
+local src = hardenUi(fetch(mobile and MOBILE or PC))
 local fn, err = loadstring(src, mobile and "DougysUI_Mobile" or "DougysUI")
 if not fn then
     error("DougysUI: compile failed: " .. tostring(err))

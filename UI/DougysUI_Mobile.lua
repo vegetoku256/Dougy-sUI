@@ -50,7 +50,22 @@ local function fetch(u)
     error("DougysUI_Mobile: failed to fetch API: " .. tostring(code or "blocked"))
 end
 
-local src = fetch(url)
+local function hardenUi(src)
+    if type(src) ~= "string" then
+        return src
+    end
+    src = src:gsub(
+        'if child:IsA%("ScreenGui"%) and child ~= keepGui then',
+        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "RobloxGui" and not child:FindFirstChild("Modules") then'
+    )
+    src = src:gsub(
+        'if child:IsA%("ScreenGui"%) and child ~= keepGui and child.Name ~= "DougysUiKind" then',
+        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "DougysUiKind" and child.Name ~= "RobloxGui" and not child:FindFirstChild("Modules") then'
+    )
+    return src
+end
+
+local src = hardenUi(fetch(url))
 local fn, err = loadstring(src, "DougysUI_Mobile")
 if not fn then
     error("DougysUI_Mobile: compile failed: " .. tostring(err))
