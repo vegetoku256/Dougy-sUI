@@ -72,18 +72,14 @@ end
 local hostGui
 pcall(function()
 	local parent
-	local lp = game:GetService("Players").LocalPlayer
-	parent = lp and (lp:FindFirstChildWhichIsA("PlayerGui") or lp:FindFirstChild("PlayerGui"))
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		end
+	end)
 	if not parent then
 		pcall(function()
 			parent = game:GetService("CoreGui")
-		end)
-	end
-	if not parent then
-		pcall(function()
-			if gethui then
-				parent = gethui()
-			end
 		end)
 	end
 	if not parent then
