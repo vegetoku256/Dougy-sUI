@@ -109,68 +109,36 @@ end
 env.DOUGYS_UI_MOBILE = mobile
 env._DUI_HOST = hostGui
 
--- ponytail: saved request survives teleport; env.request is a Lua hook that dies with the old server
-local function usableRaw(fn)
-	if type(fn) ~= "function" or fn == env.__DUI_HOOK then
-		return false
-	end
-	local skip = false
-	pcall(function()
-		if not (debug and debug.getinfo) then
-			return
-		end
-		local info = debug.getinfo(fn, "S")
-		if not info then
-			return
-		end
-		local src = tostring(info.source or "") .. tostring(info.short_src or "")
-		if string.find(src, "TSB.lua", 1, true)
-			or string.find(src, "hookedReq", 1, true)
-		then
-			skip = true
-		end
-	end)
-	return not skip
-end
-
-local function captureRaw()
-	if usableRaw(env.__DUI_RAW_REQ) then
-		return env.__DUI_RAW_REQ
-	end
+-- ponytail: keep the first real request(); later env.request is a Lua wrapper that dies on teleport
+if type(env.__DUI_RAW_REQ) ~= "function" then
 	local found
 	pcall(function()
-		if syn and usableRaw(syn.request) then
+		if syn then
 			found = syn.request
 		end
 	end)
 	pcall(function()
-		if not found and http and usableRaw(http.request) then
+		if type(found) ~= "function" and http then
 			found = http.request
 		end
 	end)
 	pcall(function()
-		if not found and usableRaw(http_request) then
+		if type(found) ~= "function" then
 			found = http_request
 		end
 	end)
 	pcall(function()
-		if not found and usableRaw(request) then
+		if type(found) ~= "function" then
 			found = request
 		end
 	end)
-	pcall(function()
-		if found and clonefunction then
-			found = clonefunction(found)
-		end
-	end)
-	return found
+	env.__DUI_RAW_REQ = found
 end
-
-local rawReq = captureRaw()
+local rawReq = env.__DUI_RAW_REQ
 if type(rawReq) ~= "function" then
+	warn("TSB: close Roblox fully (not just change server), then execute again")
 	error("TSB: close Roblox fully (not just change server), then execute again", 0)
 end
-env.__DUI_RAW_REQ = rawReq
 
 local uiStub = false
 local STUB = "return getgenv()._DUI_LIB"
@@ -267,9 +235,19 @@ local function hookedReq(opts, ...)
 end
 
 env.__DUI_HOOK = hookedReq
+env.__DUI_ON_REQ = hookedReq
+if type(env.__DUI_DISPATCH) ~= "function" then
+	env.__DUI_DISPATCH = function(opts, ...)
+		local fn = env.__DUI_ON_REQ
+		if type(fn) == "function" then
+			return fn(opts, ...)
+		end
+		return env.__DUI_RAW_REQ(opts, ...)
+	end
+end
 pcall(function()
-	env.request = hookedReq
-	env.http_request = hookedReq
+	env.request = env.__DUI_DISPATCH
+	env.http_request = env.__DUI_DISPATCH
 end)
 
 if env.__DUI_GAME ~= game then
