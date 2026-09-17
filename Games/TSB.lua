@@ -7,23 +7,42 @@ local function good(src)
     return type(src) == "string" and #src > 50
 end
 
-local inFetch = false
-local function fetch(u)
-    if not inFetch then
-        inFetch = true
-        local ok, src = pcall(function()
-            return game:HttpGet(u)
-        end)
-        inFetch = false
-        if ok and good(src) then
-            return src
+local function isUiUrl(u)
+    if type(u) ~= "string" then
+        return false
+    end
+    local s = string.lower(u)
+    return string.find(s, "dougysui", 1, true) or string.find(s, "/ui/", 1, true)
+end
+
+local rawReq = (syn and syn.request) or (http and http.request) or http_request or request
+local wrap = newcclosure or function(fn)
+    return fn
+end
+
+local uiSrc
+local mobile
+
+local statusLbl
+local function status(msg)
+    pcall(function()
+        if statusLbl then
+            statusLbl.Text = (mobile and "MOBILE | " or "PC | ") .. tostring(msg)
         end
+    end)
+end
+if getgenv then
+    getgenv()._DUI_STATUS = status
+end
+
+local function fetch(u)
+    if uiSrc and isUiUrl(u) then
+        return uiSrc
     end
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    if type(req) ~= "function" then
-        error("TSB: failed to fetch API: blocked")
+    if type(rawReq) ~= "function" then
+        error("TSB: no request()")
     end
-    local res = req({
+    local ok, res = pcall(rawReq, {
         Url = u,
         Method = "GET",
         Headers = {
@@ -31,7 +50,10 @@ local function fetch(u)
             ["Accept"] = "*/*",
         },
     })
-    local body = type(res) == "table" and (res.Body or res.body) or nil
+    if not ok then
+        error("TSB: request failed: " .. tostring(res))
+    end
+    local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
     local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
     if good(body) and (not code or code == 200) then
         return body
@@ -82,7 +104,7 @@ local function isMobileClient()
 end
 
 local forced = getgenv() and getgenv().DOUGYS_UI_MOBILE
-local mobile = (forced == true) or (forced ~= false and isMobileClient())
+mobile = (forced == true) or (forced ~= false and isMobileClient())
 if getgenv then
     getgenv().DOUGYS_UI_MOBILE = mobile
 end
@@ -112,61 +134,125 @@ pcall(function()
     g.IgnoreGuiInset = true
     g.DisplayOrder = 2147483647
     g.Parent = parent
-    local t = Instance.new("TextLabel")
-    t.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    t.BackgroundTransparency = 0.15
-    t.BorderSizePixel = 0
-    t.Font = Enum.Font.SourceSansBold
-    t.TextSize = 22
-    t.TextColor3 = Color3.fromRGB(255, 220, 80)
-    t.Text = mobile and "DougysUI: MOBILE" or "DougysUI: PC"
-    t.Size = UDim2.new(1, 0, 0, 44)
-    t.Position = UDim2.fromOffset(0, 0)
-    t.Parent = g
-    local later = (task and task.delay) or function(sec, fn)
-        spawn(function()
-            wait(sec)
-            fn()
-        end)
-    end
-    later(10, function()
-        pcall(function()
-            g:Destroy()
-        end)
-    end)
+    statusLbl = Instance.new("TextLabel")
+    statusLbl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    statusLbl.BackgroundTransparency = 0.1
+    statusLbl.BorderSizePixel = 0
+    statusLbl.Font = Enum.Font.SourceSansBold
+    statusLbl.TextSize = 18
+    statusLbl.TextColor3 = Color3.fromRGB(255, 220, 80)
+    statusLbl.TextWrapped = true
+    statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    statusLbl.Text = mobile and "MOBILE | start" or "PC | start"
+    statusLbl.Size = UDim2.new(1, 0, 0, 72)
+    statusLbl.Position = UDim2.fromOffset(0, 0)
+    statusLbl.Parent = g
 end)
 
-local uiSrc = fetch(mobile and UI_MOBILE or UI_PC)
-if mobile then
-    uiSrc = "do local c=math.clamp function math.clamp(x,a,b) if type(a)=='number' and type(b)=='number' and a>b then a,b=b,a end return c(x,a,b) end end\n" .. uiSrc
-    uiSrc = string.gsub(uiSrc, "math.max%(1, vp%.X %- inset%.X%)", "math.max(160, vp.X - inset.X)")
-    uiSrc = string.gsub(uiSrc, "math.max%(1, vp%.Y %- inset%.Y%)", "math.max(160, vp.Y - inset.Y)")
-    uiSrc = string.gsub(uiSrc, "if showSplash then\n        shell.Visible = false\n    end", "")
-    uiSrc = string.gsub(
-        uiSrc,
-        "local vp = gui.AbsoluteSize\n        local inset = getGuiInset()",
-        "local vp = gui.AbsoluteSize\n        if vp.X < 32 or vp.Y < 32 then local cam = workspace.CurrentCamera if cam and cam.ViewportSize.X >= 32 then vp = cam.ViewportSize end end\n        if vp.X < 32 or vp.Y < 32 then vp = Vector2.new(390, 844) end\n        local inset = getGuiInset()",
-        1
-    )
+local function patchUi(src)
+    if not mobile or not good(src) then
+        return src
+    end
+    src = "do local c=math.clamp function math.clamp(x,a,b) if type(a)=='number' and type(b)=='number' and a>b then a,b=b,a end return c(x,a,b) end end\n" .. src
+    src = string.gsub(src, "math.max%(1, vp%.X %- inset%.X%)", "math.max(160, vp.X - inset.X)", 1)
+    src = string.gsub(src, "math.max%(1, vp%.Y %- inset%.Y%)", "math.max(160, vp.Y - inset.Y)", 1)
+    local hide = "if showSplash then\n        shell.Visible = false\n    end"
+    local a, b = string.find(src, hide, 1, true)
+    if a then
+        src = string.sub(src, 1, a - 1) .. string.sub(src, b + 1)
+    end
+    local needle = "return __lr_lib"
+    local last
+    local pos = 1
+    while true do
+        local s = string.find(src, needle, pos, true)
+        if not s then
+            break
+        end
+        last = s
+        pos = s + 1
+    end
+    if last then
+        src = string.sub(src, 1, last - 1) .. [[
+do
+  local lib = __lr_lib
+  if type(lib) == "table" and type(lib.CreateWindow) == "function" then
+    local orig = lib.CreateWindow
+    lib.CreateWindow = function(self, cfg)
+      local st = getgenv and getgenv()._DUI_STATUS
+      if st then st("CreateWindow") end
+      local ok, win = pcall(orig, self, cfg)
+      if not ok then
+        if st then st("CW ERR: " .. tostring(win)) end
+        error(win)
+      end
+      if st then st("CW OK") end
+      return win
+    end
+  end
+end
+return __lr_lib]] .. string.sub(src, last + #needle)
+    end
+    return src
 end
 
-local function isUiUrl(u)
-    if type(u) ~= "string" then
-        return false
-    end
-    local s = string.lower(u)
-    if string.find(s, "dougysui", 1, true) then
-        return true
-    end
-    if string.find(s, "/ui/", 1, true) then
-        return true
-    end
-    return false
-end
+status("fetch UI")
+uiSrc = patchUi(fetch(mobile and UI_MOBILE or UI_PC))
+status("UI " .. tostring(#uiSrc) .. "b")
 
-local wrap = newcclosure or function(fn)
-    return fn
+local function hookedReq(opts, ...)
+    local u
+    if type(opts) == "table" then
+        u = opts.Url or opts.url
+    elseif type(opts) == "string" then
+        u = opts
+    end
+    if isUiUrl(u) then
+        return {
+            StatusCode = 200,
+            status_code = 200,
+            Body = uiSrc,
+            body = uiSrc,
+            Success = true,
+            success = true,
+        }
+    end
+    if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
+        local body = fetch(u)
+        return {
+            StatusCode = 200,
+            status_code = 200,
+            Body = body,
+            body = body,
+            Success = true,
+            success = true,
+        }
+    end
+    return rawReq(opts, ...)
 end
+local reqHook = wrap(hookedReq)
+
+pcall(function()
+    if hookfunction and type(request) == "function" then
+        hookfunction(request, reqHook)
+    end
+end)
+pcall(function()
+    if hookfunction and type(http_request) == "function" then
+        hookfunction(http_request, reqHook)
+    end
+end)
+pcall(function()
+    if hookfunction and syn and type(syn.request) == "function" then
+        hookfunction(syn.request, reqHook)
+    end
+end)
+pcall(function()
+    if getgenv then
+        getgenv().request = reqHook
+        getgenv().http_request = reqHook
+    end
+end)
 
 pcall(function()
     if not hookmetamethod then
@@ -189,26 +275,6 @@ pcall(function()
 end)
 
 pcall(function()
-    local mt = getrawmetatable(game)
-    local old = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = wrap(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "HttpGet" or method == "HttpGetAsync" then
-            local u = ...
-            if isUiUrl(u) then
-                return uiSrc
-            end
-            if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
-                return fetch(u)
-            end
-        end
-        return old(self, ...)
-    end)
-    setreadonly(mt, true)
-end)
-
-pcall(function()
     if not hookfunction then
         return
     end
@@ -224,73 +290,36 @@ pcall(function()
     end))
 end)
 
-local function showErr(msg)
-    pcall(function()
-        local parent
-        pcall(function()
-            if gethui then
-                parent = gethui()
-            end
-        end)
-        if not parent then
-            pcall(function()
-                parent = game:GetService("CoreGui")
-            end)
-        end
-        if not parent then
-            local lp = game:GetService("Players").LocalPlayer
-            parent = lp and lp:FindFirstChild("PlayerGui")
-        end
-        if not parent then
-            return
-        end
-        local g = Instance.new("ScreenGui")
-        g.ResetOnSpawn = false
-        g.IgnoreGuiInset = true
-        g.DisplayOrder = 2147483647
-        g.Parent = parent
-        local t = Instance.new("TextLabel")
-        t.BackgroundColor3 = Color3.fromRGB(80, 0, 0)
-        t.BorderSizePixel = 0
-        t.Font = Enum.Font.SourceSansBold
-        t.TextSize = 16
-        t.TextColor3 = Color3.fromRGB(255, 220, 220)
-        t.TextWrapped = true
-        t.TextXAlignment = Enum.TextXAlignment.Left
-        t.TextYAlignment = Enum.TextYAlignment.Top
-        t.Text = "TSB error:\n" .. tostring(msg)
-        t.Size = UDim2.new(1, -16, 0, 160)
-        t.Position = UDim2.fromOffset(8, 52)
-        t.Parent = g
-    end)
-end
-
 local function run(src)
     local fn, err = loadstring(src, "TSB")
     if not fn then
-        showErr(err)
+        status("compile: " .. tostring(err))
         error("TSB: compile failed: " .. tostring(err))
     end
     local ok, res = pcall(fn)
     if not ok then
-        showErr(res)
+        status("run: " .. tostring(res))
         error(res)
     end
     return res
 end
 
+status("fetch loader")
 local loaderSrc = fetch(LOADER)
 local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://api.dougys.duckdns.org"
 local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"')
 local ch = loaderSrc:match('CHALLENGE%s*=%s*"([^"]+)"')
 if not eid or not ch then
+    status("run loader")
     return run(loaderSrc)
 end
 
 local key = (getgenv and getgenv().script_key) or _G.script_key or ""
 if key == "" then
+    status("missing script_key")
     error("missing script_key", 0)
 end
+status("exchange")
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
 local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
 if mobile then
@@ -298,4 +327,7 @@ if mobile then
     payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
     payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
-return run(payload)
+status("run payload " .. tostring(#payload) .. "b")
+local result = run(payload)
+status("payload done")
+return result
