@@ -1,6 +1,6 @@
 -- GitHub allowlist shim. TSB loads this file for UI; pick mobile vs PC here.
-local PC = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
-local MOBILE = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local function good(src)
     return type(src) == "string" and #src > 50

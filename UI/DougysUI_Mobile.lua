@@ -1,5 +1,5 @@
 -- GitHub allowlist shim. Real mobile UI is fetched from the Dougys API.
-local url = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local url = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local function good(src)
     return type(src) == "string" and #src > 50

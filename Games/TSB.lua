@@ -1,7 +1,7 @@
 -- GitHub allowlist shim. Real TSB loader is fetched from the Dougys API.
 local LOADER = "https://api.dougys.duckdns.org/loader/JzS9pLWIVJHcRHGNwg_xp3bXTjnfFFN2"
-local UI_PC = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
-local UI_MOBILE = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local UI_PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local UI_MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local function good(src)
     return type(src) == "string" and #src > 50
@@ -236,7 +236,7 @@ local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
 local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
 if mobile then
     payload = "getgenv().DOUGYS_UI_MOBILE=true\n" .. payload
-    payload = string.gsub(payload, "Q6QhyofwluRSohJgezfv44vU4O4lN%-aV", "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM")
+    payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
     payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
 return run(payload)
