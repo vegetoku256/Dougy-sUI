@@ -7,30 +7,51 @@ local function good(src)
 end
 
 local function fetch(u)
+    local rawReq
+    pcall(function()
+        if syn then
+            rawReq = syn.request
+        end
+    end)
+    pcall(function()
+        if not rawReq and http then
+            rawReq = http.request
+        end
+    end)
+    pcall(function()
+        if not rawReq then
+            rawReq = http_request
+        end
+    end)
+    pcall(function()
+        if not rawReq then
+            rawReq = request
+        end
+    end)
+    if type(rawReq) == "function" then
+        local ok, res = pcall(rawReq, {
+            Url = u,
+            Method = "GET",
+            Headers = {
+                ["User-Agent"] = "Mozilla/5.0",
+                ["Accept"] = "*/*",
+            },
+        })
+        if ok then
+            local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
+            local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
+            if good(body) and (not code or code == 200) then
+                return body
+            end
+        end
+    end
     local ok, src = pcall(function()
         return game:HttpGet(u)
     end)
     if ok and good(src) then
         return src
     end
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    if type(req) ~= "function" then
-        error("DougysUI: failed to fetch API: " .. tostring(src))
-    end
-    local res = req({
-        Url = u,
-        Method = "GET",
-        Headers = {
-            ["User-Agent"] = "Mozilla/5.0",
-            ["Accept"] = "*/*",
-        },
-    })
-    local body = type(res) == "table" and (res.Body or res.body) or nil
-    local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
-    if good(body) and (not code or code == 200) then
-        return body
-    end
-    error("DougysUI: failed to fetch API: " .. tostring(code or src))
+    error("DougysUI: failed to fetch API")
 end
 
 local function isMobileClient()
@@ -92,52 +113,9 @@ else
     mobile = isMobileClient()
 end
 
-pcall(function()
-    local parent
-    pcall(function()
-        if gethui then
-            parent = gethui()
-        end
-    end)
-    if not parent then
-        pcall(function()
-            parent = game:GetService("CoreGui")
-        end)
-    end
-    if not parent then
-        local lp = game:GetService("Players").LocalPlayer
-        parent = lp and lp:FindFirstChild("PlayerGui")
-    end
-    if not parent then
-        return
-    end
-    local g = Instance.new("ScreenGui")
-    g.Name = "DougysUiKind"
-    g.ResetOnSpawn = false
-    g.DisplayOrder = 2147483647
-    g.Parent = parent
-    local t = Instance.new("TextLabel")
-    t.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    t.BorderSizePixel = 0
-    t.Font = Enum.Font.SourceSansBold
-    t.TextSize = 18
-    t.TextColor3 = Color3.fromRGB(255, 220, 80)
-    t.Text = mobile and "DougysUI: MOBILE" or "DougysUI: PC"
-    t.Size = UDim2.fromOffset(220, 36)
-    t.Position = UDim2.fromOffset(12, 12)
-    t.Parent = g
-    local later = (task and task.delay) or function(sec, fn)
-        spawn(function()
-            wait(sec)
-            fn()
-        end)
-    end
-    later(8, function()
-        if g then
-            g:Destroy()
-        end
-    end)
-end)
+if getgenv then
+    getgenv().DOUGYS_UI_MOBILE = mobile
+end
 
 local src = fetch(mobile and MOBILE or PC)
 local fn, err = loadstring(src, mobile and "DougysUI_Mobile" or "DougysUI")

@@ -5,12 +5,32 @@ local function good(src)
     return type(src) == "string" and #src > 50
 end
 
-local rawReq = (syn and syn.request) or (http and http.request) or http_request or request
+local rawReq
+pcall(function()
+    if syn then
+        rawReq = syn.request
+    end
+end)
+pcall(function()
+    if not rawReq and http then
+        rawReq = http.request
+    end
+end)
+pcall(function()
+    if not rawReq then
+        rawReq = http_request
+    end
+end)
+pcall(function()
+    if not rawReq then
+        rawReq = request
+    end
+end)
+if type(rawReq) ~= "function" then
+    error("DougysUI_Mobile: no request()")
+end
 
 local function fetch(u)
-    if type(rawReq) ~= "function" then
-        error("DougysUI_Mobile: no request()")
-    end
     local ok, res = pcall(rawReq, {
         Url = u,
         Method = "GET",
@@ -31,9 +51,6 @@ local function fetch(u)
 end
 
 local src = fetch(url)
-src = "do local c=math.clamp function math.clamp(x,a,b) if type(a)=='number' and type(b)=='number' and a>b then a,b=b,a end return c(x,a,b) end end\n" .. src
-src = string.gsub(src, "math.max%(1, vp%.X %- inset%.X%)", "math.max(160, vp.X - inset.X)", 1)
-src = string.gsub(src, "math.max%(1, vp%.Y %- inset%.Y%)", "math.max(160, vp.Y - inset.Y)", 1)
 local fn, err = loadstring(src, "DougysUI_Mobile")
 if not fn then
     error("DougysUI_Mobile: compile failed: " .. tostring(err))
