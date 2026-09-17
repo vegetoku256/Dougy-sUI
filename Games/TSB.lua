@@ -216,34 +216,40 @@ local function run(src)
     return res
 end
 
-local function isRobloxGui(name)
-    local n = string.lower(tostring(name))
-    return string.find(n, "roblox", 1, true)
-        or string.find(n, "chat", 1, true)
-        or string.find(n, "playerlist", 1, true)
-        or string.find(n, "topbar", 1, true)
-        or name == "DougysUiKind"
-end
-
-local function adoptFrom(parent)
-    if not hostGui or not parent then
+local function revealOurs(parent, moveIfNested)
+    if not parent then
         return 0
     end
     local n = 0
     local kids = parent:GetChildren()
     for i = 1, #kids do
         local child = kids[i]
-        if child:IsA("ScreenGui") and child ~= hostGui and not isRobloxGui(child.Name) then
-            local sub = child:GetChildren()
-            for j = 1, #sub do
-                pcall(function()
-                    sub[j].Parent = hostGui
-                end)
-                n = n + 1
-            end
+        if child:IsA("ScreenGui") and child ~= hostGui then
+            local order = 0
             pcall(function()
-                child:Destroy()
+                order = child.DisplayOrder
             end)
+            if order >= 500000 then
+                pcall(function()
+                    child.Enabled = true
+                    child.IgnoreGuiInset = true
+                    child.DisplayOrder = 999999
+                end)
+                if moveIfNested and parent:IsA("ScreenGui") then
+                    local sub = child:GetChildren()
+                    for j = 1, #sub do
+                        pcall(function()
+                            sub[j].Parent = hostGui
+                        end)
+                        n = n + 1
+                    end
+                    pcall(function()
+                        child:Destroy()
+                    end)
+                else
+                    n = n + 1
+                end
+            end
         end
     end
     return n
@@ -253,15 +259,16 @@ local function adoptUi()
     local n = 0
     pcall(function()
         if gethui then
-            n = n + adoptFrom(gethui())
+            local h = gethui()
+            n = n + revealOurs(h, h and h:IsA("ScreenGui"))
         end
     end)
     pcall(function()
-        n = n + adoptFrom(hostGui and hostGui.Parent)
+        n = n + revealOurs(game:GetService("CoreGui"), false)
     end)
     pcall(function()
         local lp = game:GetService("Players").LocalPlayer
-        n = n + adoptFrom(lp and lp:FindFirstChild("PlayerGui"))
+        n = n + revealOurs(lp and lp:FindFirstChild("PlayerGui"), false)
     end)
     return n
 end
