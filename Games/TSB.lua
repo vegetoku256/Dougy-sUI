@@ -15,6 +15,17 @@ local function isUiUrl(u)
     return string.find(s, "dougysui", 1, true) or string.find(s, "/ui/", 1, true)
 end
 
+local function isRobloxGui(name)
+    local n = string.lower(tostring(name))
+    return string.find(n, "roblox", 1, true)
+        or string.find(n, "chat", 1, true)
+        or string.find(n, "playerlist", 1, true)
+        or string.find(n, "topbar", 1, true)
+        or string.find(n, "bubble", 1, true)
+        or string.find(n, "purchase", 1, true)
+        or name == "DougysUiKind"
+end
+
 local rawReq = (syn and syn.request) or (http and http.request) or http_request or request
 local wrap = newcclosure or function(fn)
     return fn
@@ -22,6 +33,7 @@ end
 
 local uiSrc
 local mobile
+local hostGui
 
 local statusLbl
 local function status(msg)
@@ -59,6 +71,16 @@ local function fetch(u)
         return body
     end
     error("TSB: failed to fetch API: " .. tostring(code or "blocked"))
+end
+
+local function getUi()
+    if good(uiSrc) then
+        return uiSrc
+    end
+    status("fetch UI")
+    uiSrc = fetch(mobile and UI_MOBILE or UI_PC)
+    status("UI " .. tostring(#uiSrc) .. "b")
+    return uiSrc
 end
 
 local function isMobileClient()
@@ -128,14 +150,14 @@ pcall(function()
     if not parent then
         return
     end
-    local g = Instance.new("ScreenGui")
-    g.Name = "DougysUiKind"
-    g.ResetOnSpawn = false
-    g.IgnoreGuiInset = true
-    g.DisplayOrder = 2147483647
-    g.Parent = parent
+    hostGui = Instance.new("ScreenGui")
+    hostGui.Name = "DougysUiKind"
+    hostGui.ResetOnSpawn = false
+    hostGui.IgnoreGuiInset = true
+    hostGui.DisplayOrder = 2147483647
+    hostGui.Parent = parent
     if getgenv then
-        getgenv()._DUI_HOST = g
+        getgenv()._DUI_HOST = hostGui
     end
     statusLbl = Instance.new("TextLabel")
     statusLbl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -149,63 +171,9 @@ pcall(function()
     statusLbl.Text = mobile and "MOBILE | start" or "PC | start"
     statusLbl.Size = UDim2.new(1, 0, 0, 72)
     statusLbl.Position = UDim2.fromOffset(0, 0)
-    statusLbl.Parent = g
+    statusLbl.ZIndex = 10000
+    statusLbl.Parent = hostGui
 end)
-
-local function patchUi(src)
-    if not mobile or not good(src) then
-        return src
-    end
-    src = "do local c=math.clamp function math.clamp(x,a,b) if type(a)=='number' and type(b)=='number' and a>b then a,b=b,a end return c(x,a,b) end end\n" .. src
-    src = string.gsub(src, "math.max%(1, vp%.X %- inset%.X%)", "math.max(160, vp.X - inset.X)", 1)
-    src = string.gsub(src, "math.max%(1, vp%.Y %- inset%.Y%)", "math.max(160, vp.Y - inset.Y)", 1)
-    src = string.gsub(
-        src,
-        'if child:IsA("ScreenGui") and child ~= keepGui then',
-        'if child:IsA("ScreenGui") and child ~= keepGui and child.Name ~= "DougysUiKind" then',
-        1
-    )
-    local hide = "if showSplash then\n        shell.Visible = false\n    end"
-    local a, b = string.find(src, hide, 1, true)
-    if a then
-        src = string.sub(src, 1, a - 1) .. string.sub(src, b + 1)
-    end
-    local oldGui = "    local gui = create(\"ScreenGui\", {\n        Name = StealthNames.gui .. \"_\" .. generateRandomName(4), -- Random name to avoid detection\n        IgnoreGuiInset = true,\n        ResetOnSpawn = false,\n        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,\n        DisplayOrder = math.random(900000, 999999), -- Randomize display order\n        Parent = StealthParent\n    })"
-    local newGui = "    local gui\n    do\n        local host = (getgenv and getgenv()._DUI_HOST) or StealthParent\n        if host and host:IsA(\"ScreenGui\") then\n            gui = create(\"Frame\", {\n                Name = StealthNames.gui .. \"_\" .. generateRandomName(4),\n                BackgroundTransparency = 1,\n                BorderSizePixel = 0,\n                Size = UDim2.fromScale(1, 1),\n                Parent = host\n            })\n        else\n            gui = create(\"ScreenGui\", {\n                Name = StealthNames.gui .. \"_\" .. generateRandomName(4),\n                IgnoreGuiInset = true,\n                ResetOnSpawn = false,\n                ZIndexBehavior = Enum.ZIndexBehavior.Sibling,\n                DisplayOrder = 2147483646,\n                Parent = host or StealthParent\n            })\n        end\n    end"
-    local ga, gb = string.find(src, oldGui, 1, true)
-    if ga then
-        src = string.sub(src, 1, ga - 1) .. newGui .. string.sub(src, gb + 1)
-    end
-    local ws = string.find(src, 'if type(__lr_lib) == "table" then', 1, true)
-    if ws then
-        src = string.sub(src, 1, ws - 1)
-    end
-    src = src .. [[
-do
-  local lib = __lr_lib
-  if type(lib) == "table" and type(lib.CreateWindow) == "function" then
-    local orig = lib.CreateWindow
-    lib.CreateWindow = function(self, cfg)
-      local st = getgenv and getgenv()._DUI_STATUS
-      if st then st("CreateWindow") end
-      local ok, win = pcall(orig, self, cfg)
-      if not ok then
-        if st then st("CW ERR: " .. tostring(win)) end
-        error(win)
-      end
-      if st then st("CW OK") end
-      return win
-    end
-  end
-end
-return __lr_lib
-]]
-    return src
-end
-
-status("fetch UI")
-uiSrc = patchUi(fetch(mobile and UI_MOBILE or UI_PC))
-status("UI " .. tostring(#uiSrc) .. "b")
 
 local function hookedReq(opts, ...)
     local u
@@ -215,11 +183,12 @@ local function hookedReq(opts, ...)
         u = opts
     end
     if isUiUrl(u) then
+        local body = getUi()
         return {
             StatusCode = 200,
             status_code = 200,
-            Body = uiSrc,
-            body = uiSrc,
+            Body = body,
+            body = body,
             Success = true,
             success = true,
         }
@@ -279,7 +248,7 @@ pcall(function()
         if method == "HttpGet" or method == "HttpGetAsync" then
             local u = ...
             if isUiUrl(u) then
-                return uiSrc
+                return getUi()
             end
             if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
                 return fetch(u)
@@ -296,7 +265,7 @@ pcall(function()
     local oldHttp
     oldHttp = hookfunction(game.HttpGet, wrap(function(self, u, ...)
         if isUiUrl(u) then
-            return uiSrc
+            return getUi()
         end
         if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
             return fetch(u)
@@ -319,6 +288,76 @@ local function run(src)
     return res
 end
 
+local function adoptFrom(parent)
+    if not hostGui or not parent then
+        return 0
+    end
+    local n = 0
+    local kids = parent:GetChildren()
+    for i = 1, #kids do
+        local child = kids[i]
+        if child:IsA("ScreenGui") and child ~= hostGui and not isRobloxGui(child.Name) then
+            local sub = child:GetChildren()
+            for j = 1, #sub do
+                pcall(function()
+                    sub[j].Parent = hostGui
+                end)
+                n = n + 1
+            end
+            pcall(function()
+                child:Destroy()
+            end)
+        end
+    end
+    return n
+end
+
+local function adoptUi()
+    local n = 0
+    pcall(function()
+        if gethui then
+            n = n + adoptFrom(gethui())
+        end
+    end)
+    pcall(function()
+        n = n + adoptFrom(hostGui.Parent)
+    end)
+    pcall(function()
+        local lp = game:GetService("Players").LocalPlayer
+        n = n + adoptFrom(lp and lp:FindFirstChild("PlayerGui"))
+    end)
+    pcall(function()
+        local kids = game:GetService("CoreGui"):GetChildren()
+        for i = 1, #kids do
+            local child = kids[i]
+            if child:IsA("ScreenGui") and child ~= hostGui and not isRobloxGui(child.Name) then
+                local order = 0
+                pcall(function()
+                    order = child.DisplayOrder
+                end)
+                if order >= 500000 then
+                    local sub = child:GetChildren()
+                    for j = 1, #sub do
+                        pcall(function()
+                            sub[j].Parent = hostGui
+                        end)
+                        n = n + 1
+                    end
+                    pcall(function()
+                        child:Destroy()
+                    end)
+                end
+            end
+        end
+    end)
+    pcall(function()
+        if statusLbl then
+            statusLbl.ZIndex = 10000
+        end
+    end)
+    return n
+end
+
 status("fetch loader")
 local loaderSrc = fetch(LOADER)
 local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://api.dougys.duckdns.org"
@@ -326,7 +365,9 @@ local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"')
 local ch = loaderSrc:match('CHALLENGE%s*=%s*"([^"]+)"')
 if not eid or not ch then
     status("run loader")
-    return run(loaderSrc)
+    local result = run(loaderSrc)
+    status("adopted " .. tostring(adoptUi()))
+    return result
 end
 
 local key = (getgenv and getgenv().script_key) or _G.script_key or ""
@@ -344,12 +385,5 @@ if mobile then
 end
 status("run payload " .. tostring(#payload) .. "b")
 local result = run(payload)
-local kids = 0
-pcall(function()
-    local host = getgenv() and getgenv()._DUI_HOST
-    if host then
-        kids = #host:GetChildren()
-    end
-end)
-status("done hostKids=" .. tostring(kids))
+status("adopted " .. tostring(adoptUi()))
 return result
