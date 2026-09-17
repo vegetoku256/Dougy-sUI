@@ -39,6 +39,27 @@ end
 
 local function isMobileClient()
     local uis = game:GetService("UserInputService")
+    local exec = ""
+    pcall(function()
+        if identifyexecutor then
+            exec = string.lower(tostring(identifyexecutor()))
+        end
+    end)
+    pcall(function()
+        if getexecutorname then
+            exec = exec .. " " .. string.lower(tostring(getexecutorname()))
+        end
+    end)
+    if string.find(exec, "delta", 1, true)
+        or string.find(exec, "hydrogen", 1, true)
+        or string.find(exec, "codex", 1, true)
+        or string.find(exec, "arceus", 1, true)
+        or string.find(exec, "trigon", 1, true)
+        or string.find(exec, "vegax", 1, true)
+        or string.find(exec, "vega x", 1, true)
+    then
+        return true
+    end
     local okPlat, plat = pcall(function()
         return uis:GetPlatform()
     end)
@@ -51,6 +72,9 @@ local function isMobileClient()
     if okPref and pref == Enum.PreferredInput.Touch then
         return true
     end
+    if uis.GyroscopeEnabled or uis.AccelerometerEnabled then
+        return true
+    end
     if uis.TouchEnabled and not uis.KeyboardEnabled then
         return true
     end
@@ -60,7 +84,13 @@ local function isMobileClient()
     local cam = workspace.CurrentCamera
     if cam then
         local vs = cam.ViewportSize
-        if math.min(vs.X, vs.Y) <= 500 then
+        local minSide = math.min(vs.X, vs.Y)
+        local maxSide = math.max(vs.X, vs.Y)
+        local aspect = maxSide / math.max(minSide, 1)
+        if minSide <= 500 then
+            return true
+        end
+        if aspect >= 1.95 and minSide <= 1400 and maxSide <= 2800 then
             return true
         end
     end
@@ -68,6 +98,9 @@ local function isMobileClient()
 end
 
 local mobile = isMobileClient()
+if getgenv then
+    getgenv().DOUGYS_UI_MOBILE = mobile
+end
 
 local function rewriteUiUrl(u)
     if not mobile or type(u) ~= "string" then
@@ -107,6 +140,20 @@ pcall(function()
     setreadonly(mt, true)
 end)
 
+pcall(function()
+    if not hookfunction then
+        return
+    end
+    local oldHttp
+    oldHttp = hookfunction(game.HttpGet, function(self, u, ...)
+        u = rewriteUiUrl(u)
+        if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
+            return fetch(u)
+        end
+        return oldHttp(self, u, ...)
+    end)
+end)
+
 local function run(src)
     local fn, err = loadstring(src, "TSB")
     if not fn then
@@ -131,5 +178,7 @@ local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
 local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
 if mobile then
     payload = string.gsub(payload, "UserInputService%.TouchEnabled and UI_MOBILE or UI_PC", "true and UI_MOBILE or UI_PC")
+    payload = string.gsub(payload, "isMobileClient%(%) and UI_MOBILE or UI_PC", "true and UI_MOBILE or UI_PC")
+    payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
 end
 return run(payload)
