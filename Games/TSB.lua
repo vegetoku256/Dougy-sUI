@@ -137,15 +137,13 @@ local function fetch(u)
     if uiStub and isUiUrl(u) then
         return STUB
     end
-    local okGet, src = pcall(function()
-        return game:HttpGet(u)
-    end)
-    if okGet and good(src) then
-        return src
-    end
     local ok, res = pcall(rawReq, {
         Url = u,
         Method = "GET",
+        Headers = {
+            ["User-Agent"] = "Mozilla/5.0",
+            ["Accept"] = "*/*",
+        },
     })
     if not ok then
         error("TSB: request failed: " .. tostring(res))

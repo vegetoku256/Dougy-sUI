@@ -31,15 +31,13 @@ if type(rawReq) ~= "function" then
 end
 
 local function fetch(u)
-    local okGet, src = pcall(function()
-        return game:HttpGet(u)
-    end)
-    if okGet and good(src) then
-        return src
-    end
     local ok, res = pcall(rawReq, {
         Url = u,
         Method = "GET",
+        Headers = {
+            ["User-Agent"] = "Mozilla/5.0",
+            ["Accept"] = "*/*",
+        },
     })
     if not ok then
         error("DougysUI_Mobile: request failed: " .. tostring(res))

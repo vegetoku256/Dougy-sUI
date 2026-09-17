@@ -7,12 +7,6 @@ local function good(src)
 end
 
 local function fetch(u)
-    local okGet, src = pcall(function()
-        return game:HttpGet(u)
-    end)
-    if okGet and good(src) then
-        return src
-    end
     local rawReq
     pcall(function()
         if syn then
@@ -38,6 +32,10 @@ local function fetch(u)
         local ok, res = pcall(rawReq, {
             Url = u,
             Method = "GET",
+            Headers = {
+                ["User-Agent"] = "Mozilla/5.0",
+                ["Accept"] = "*/*",
+            },
         })
         if ok then
             local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
@@ -46,6 +44,12 @@ local function fetch(u)
                 return body
             end
         end
+    end
+    local ok, src = pcall(function()
+        return game:HttpGet(u)
+    end)
+    if ok and good(src) then
+        return src
     end
     error("DougysUI: failed to fetch API")
 end
