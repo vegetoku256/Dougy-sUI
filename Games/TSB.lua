@@ -111,7 +111,15 @@ local function isMobileClient()
     return true
 end
 
-local mobile = isMobileClient()
+local forced = getgenv() and getgenv().DOUGYS_UI_MOBILE
+local mobile
+if forced == true then
+    mobile = true
+elseif forced == false then
+    mobile = false
+else
+    mobile = isMobileClient()
+end
 if getgenv then
     getgenv().DOUGYS_UI_MOBILE = mobile
 end
@@ -192,6 +200,7 @@ end
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
 local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
 if mobile then
+    payload = "getgenv().DOUGYS_UI_MOBILE=true\n" .. payload
     payload = string.gsub(payload, "UserInputService%.TouchEnabled and UI_MOBILE or UI_PC", "true and UI_MOBILE or UI_PC")
     payload = string.gsub(payload, "isMobileClient%(%) and UI_MOBILE or UI_PC", "true and UI_MOBILE or UI_PC")
     payload = string.gsub(payload, "DougysUI%.lua", "DougysUI_Mobile.lua")
