@@ -1,9 +1,17 @@
 -- GitHub allowlist shim. Real TSB loader is fetched from the Dougys API.
+-- No HttpGet/request hooks: those survive a server hop and block the next execute.
 local LOADER = "https://api.dougys.duckdns.org/loader/JzS9pLWIVJHcRHGNwg_xp3bXTjnfFFN2"
 local UI_PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
 local UI_MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local env = (getgenv and getgenv()) or _G
+env.__DUI_ON_HTTPGET = nil
+env.__DUI_ON_REQ = nil
+pcall(function()
+	if restorefunction and request then
+		restorefunction(request)
+	end
+end)
 
 local function good(src)
 	return type(src) == "string" and #src > 50
@@ -11,14 +19,6 @@ end
 
 local function isDeny(src)
 	return type(src) == "string" and string.find(src, "-- luarmor deny", 1, true) ~= nil
-end
-
-local function isUiUrl(u)
-	if type(u) ~= "string" then
-		return false
-	end
-	local s = string.lower(u)
-	return string.find(s, "dougysui", 1, true) or string.find(s, "/ui/", 1, true)
 end
 
 local function isMobileClient()
@@ -108,26 +108,9 @@ else
 end
 env.DOUGYS_UI_MOBILE = mobile
 env._DUI_HOST = hostGui
-
--- ponytail: never replace env.request; it survives hops and the Lua wrapper does not
-local job = tostring(game.JobId)
-if env.__DUI_JOB ~= job then
-	env.__DUI_ON_REQ = nil
-	env.__DUI_ON_HTTPGET = nil
-	pcall(function()
-		if restorefunction and request then
-			restorefunction(request)
-		end
-	end)
-	pcall(function()
-		if restorefunction and http_request then
-			restorefunction(http_request)
-		end
-	end)
-	env.__DUI_HF = nil
-	env.__DUI_ORIG_REQUEST = nil
-	env.__DUI_JOB = job
+if env.__DUI_JOB ~= tostring(game.JobId) then
 	env._DUI_LIB = nil
+	env.__DUI_JOB = tostring(game.JobId)
 end
 
 local function nativeReq()
@@ -144,58 +127,39 @@ local function nativeReq()
 	end)
 	pcall(function()
 		if type(fn) ~= "function" then
-			fn = fluxus and fluxus.request
-		end
-	end)
-	pcall(function()
-		if type(fn) ~= "function" then
-			fn = env.__DUI_ORIG_REQUEST
-		end
-	end)
-	pcall(function()
-		if type(fn) ~= "function" and not env.__DUI_HF then
 			fn = http_request
 		end
 	end)
 	pcall(function()
-		if type(fn) ~= "function" and not env.__DUI_HF then
+		if type(fn) ~= "function" then
 			fn = request
 		end
 	end)
 	return fn
 end
 
-local uiStub = false
-local STUB = "return getgenv()._DUI_LIB"
-local depth = 0
-
 local function fetch(u)
-	if uiStub and isUiUrl(u) then
-		return STUB
-	end
-	if depth > 2 then
-		error("TSB: request loop")
-	end
-	depth = depth + 1
 	local fn = nativeReq()
-	local ok, res = false, nil
-	if type(fn) == "function" then
-		ok, res = pcall(fn, {
-			Url = u,
-			Method = "GET",
-			Headers = {
-				["User-Agent"] = "Mozilla/5.0",
-				["Accept"] = "*/*",
-			},
-		})
+	if type(fn) ~= "function" then
+		error("TSB: no request()", 0)
 	end
-	depth = depth - 1
-	local body = ok and type(res) == "table" and (res.Body or res.body) or (ok and type(res) == "string" and res or nil)
-	local code = ok and type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
+	local ok, res = pcall(fn, {
+		Url = u,
+		Method = "GET",
+		Headers = {
+			["User-Agent"] = "Mozilla/5.0",
+			["Accept"] = "*/*",
+		},
+	})
+	if not ok then
+		error("TSB: request failed: " .. tostring(res), 0)
+	end
+	local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
+	local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
 	if good(body) and (not code or code == 200) then
 		return body
 	end
-	error("TSB: failed to fetch API: " .. tostring(code or res or "blocked"))
+	error("TSB: failed to fetch API: " .. tostring(code or "blocked"), 0)
 end
 
 local function prepareUi(src)
@@ -207,8 +171,8 @@ local function prepareUi(src)
 end
 
 local function getUi()
-	if uiStub then
-		return STUB
+	if type(env._DUI_LIB) == "table" and type(env._DUI_LIB.CreateWindow) == "function" then
+		return env._DUI_LIB
 	end
 	local src = prepareUi(fetch(mobile and UI_MOBILE or UI_PC))
 	local fn, err = loadstring(src, "DougysUI")
@@ -217,122 +181,20 @@ local function getUi()
 		fn, err = loadstring(prepareUi(fetch(UI_PC)), "DougysUI")
 	end
 	if not fn then
-		error("TSB: UI compile failed: " .. tostring(err))
+		error("TSB: UI compile failed: " .. tostring(err), 0)
 	end
 	local ok, lib = pcall(fn)
 	if not ok or type(lib) ~= "table" or type(lib.CreateWindow) ~= "function" then
-		error("TSB: UI run failed: " .. tostring(lib))
+		error("TSB: UI run failed: " .. tostring(lib), 0)
 	end
 	env._DUI_LIB = lib
-	uiStub = true
-	return STUB
+	return lib
 end
-
-local function hookedReq(opts, ...)
-	local u
-	if type(opts) == "table" then
-		u = opts.Url or opts.url
-	elseif type(opts) == "string" then
-		u = opts
-	end
-	if isUiUrl(u) then
-		local body = getUi()
-		return {
-			StatusCode = 200,
-			status_code = 200,
-			Body = body,
-			body = body,
-			Success = true,
-			success = true,
-		}
-	end
-	if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
-		local body = fetch(u)
-		return {
-			StatusCode = 200,
-			status_code = 200,
-			Body = body,
-			body = body,
-			Success = true,
-			success = true,
-		}
-	end
-	local fn = nativeReq()
-	return fn(opts, ...)
-end
-
-env.__DUI_ON_REQ = hookedReq
-env.__DUI_ON_HTTPGET = function(...)
-	local u = ...
-	if isUiUrl(u) then
-		return getUi()
-	end
-	if type(u) == "string" and string.find(u, "api.dougys.duckdns.org", 1, true) then
-		return fetch(u)
-	end
-	error("skip")
-end
-
-if hookfunction and not env.__DUI_HF then
-	pcall(function()
-		local old
-		old = hookfunction(request, function(...)
-			local fn = env.__DUI_ON_REQ
-			if type(fn) == "function" then
-				return fn(...)
-			end
-			return old(...)
-		end)
-		if type(old) == "function" then
-			env.__DUI_ORIG_REQUEST = old
-			env.__DUI_HF = true
-		end
-	end)
-end
-
-if hookmetamethod and env.__DUI_NC_GAME ~= game then
-	env.__DUI_NC_GAME = game
-	pcall(function()
-		local old
-		old = hookmetamethod(game, "__namecall", function(self, ...)
-			local method = getnamecallmethod()
-			if method == "HttpGet" or method == "HttpGetAsync" then
-				local fn = env.__DUI_ON_HTTPGET
-				if type(fn) == "function" then
-					local ok, result = pcall(fn, ...)
-					if ok then
-						return result
-					end
-				end
-			end
-			return old(self, ...)
-		end)
-	end)
-end
-
-pcall(function()
-	local lp = game:GetService("Players").LocalPlayer
-	if lp and not env.__DUI_TP then
-		env.__DUI_TP = true
-		lp.OnTeleport:Connect(function()
-			env.__DUI_ON_REQ = nil
-			env.__DUI_ON_HTTPGET = nil
-			env.__DUI_JOB = nil
-			pcall(function()
-				if restorefunction and request then
-					restorefunction(request)
-				end
-			end)
-			env.__DUI_HF = nil
-			env.__DUI_ORIG_REQUEST = nil
-		end)
-	end
-end)
 
 local function run(src)
 	local fn, err = loadstring(src, "TSB")
 	if not fn then
-		error("TSB: compile failed: " .. tostring(err))
+		error("TSB: compile failed: " .. tostring(err), 0)
 	end
 	return fn()
 end
