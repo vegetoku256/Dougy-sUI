@@ -60,10 +60,7 @@ local function isMobileClient()
     then
         return true
     end
-    local okPlat, plat = pcall(function()
-        return uis:GetPlatform()
-    end)
-    if okPlat and (plat == Enum.Platform.IOS or plat == Enum.Platform.Android) then
+    if uis.TouchEnabled or uis.GyroscopeEnabled or uis.AccelerometerEnabled then
         return true
     end
     local okPref, pref = pcall(function()
@@ -72,35 +69,53 @@ local function isMobileClient()
     if okPref and pref == Enum.PreferredInput.Touch then
         return true
     end
-    if uis.GyroscopeEnabled or uis.AccelerometerEnabled then
+    local okPlat, plat = pcall(function()
+        return uis:GetPlatform()
+    end)
+    if okPlat and (plat == Enum.Platform.IOS or plat == Enum.Platform.Android) then
         return true
     end
-    if uis.TouchEnabled and not uis.KeyboardEnabled then
-        return true
-    end
-    if uis.TouchEnabled and not uis.MouseEnabled then
+    local touchGui = false
+    pcall(function()
+        local plr = game:GetService("Players").LocalPlayer
+        local pg = plr and plr:FindFirstChild("PlayerGui")
+        touchGui = pg and pg:FindFirstChild("TouchGui") ~= nil
+    end)
+    if touchGui then
         return true
     end
     local cam = workspace.CurrentCamera
-    if cam then
-        local vs = cam.ViewportSize
+    local vs = cam and cam.ViewportSize
+    if vs and vs.Y > vs.X then
+        return true
+    end
+    if vs then
         local minSide = math.min(vs.X, vs.Y)
         local maxSide = math.max(vs.X, vs.Y)
         local aspect = maxSide / math.max(minSide, 1)
-        if minSide <= 500 then
-            return true
-        end
-        if aspect >= 1.95 and minSide <= 1400 and maxSide <= 2800 then
+        if minSide <= 500 or (aspect >= 1.95 and minSide <= 1400 and maxSide <= 2800) then
             return true
         end
     end
-    return false
+    local pcNames = {
+        "synapse", "wave", "solara", "valex", "electron", "celery", "zenith",
+        "seliware", "xeno", "awp", "macsploit", "potassium", "velocity",
+        "scriptware", "jjsploit", "bunni", "matcha", "ronix", "cryptic",
+        "nixware", "evon",
+    }
+    for i = 1, #pcNames do
+        if string.find(exec, pcNames[i], 1, true) then
+            return false
+        end
+    end
+    return true
 end
 
 local mobile = isMobileClient()
 if getgenv then
     getgenv().DOUGYS_UI_MOBILE = mobile
 end
+warn("[Dougys] ui=" .. (mobile and "mobile" or "pc"))
 
 local function rewriteUiUrl(u)
     if not mobile or type(u) ~= "string" then
