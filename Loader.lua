@@ -1,11 +1,3 @@
--- Design Read: executor key-gate for Dougy's hub users, DougysUI Dark gold-on-ink, ENERGY 1 / RHYTHM 1 / MOTION 1.
--- Color: same Dark gold as DougysUI so the gate matches the hub after unlock.
--- Layout: one centered card; the job is paste key, pick the key site, load.
--- Type: BuilderSans, the hub face.
--- Accent: gold on Get your key and the selected provider only.
--- Elevation: one card lift so it sits above the place.
--- Dark: overlay on a 3D game, same as the hub.
-
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
