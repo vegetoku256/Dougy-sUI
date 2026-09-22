@@ -14,6 +14,10 @@ local GAMES = {
 		name = "The Strongest Battlegrounds",
 		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/TSB.lua",
 	},
+	[137925884276740] = {
+		name = "Build a Plane",
+		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/BAP.lua",
+	},
 }
 
 local PROVIDERS = {
@@ -270,7 +274,7 @@ local function unlock()
 		setStatus("Could not download the hub. Try again.", true)
 		return
 	end
-	local fn, err = loadstring(srcOrErr, "TSB")
+	local fn, err = loadstring(srcOrErr, place.name)
 	if not fn then
 		busy = false
 		setStatus("Could not compile the hub. Check your key and try again.", true)
@@ -472,7 +476,7 @@ local function build()
 	end
 
 	if not place then
-		setStatus("This place is not supported. Close this panel and run the loader in The Strongest Battlegrounds.")
+		setStatus("This place is not supported. Run the loader in The Strongest Battlegrounds or Build a Plane.")
 		layoutCard()
 		return
 	end
