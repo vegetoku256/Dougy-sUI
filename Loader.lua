@@ -22,6 +22,10 @@ local GAMES = {
 		name = "Taxi Boss",
 		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/TB.lua",
 	},
+	[111543903102439] = {
+		name = "Stone Skipping",
+		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/SK.lua",
+	},
 }
 
 local PROVIDERS = {
@@ -480,7 +484,7 @@ local function build()
 	end
 
 	if not place then
-		setStatus("This place is not supported. Run the loader in The Strongest Battlegrounds, Build a Plane, or Taxi Boss.")
+		setStatus("This place is not supported. Run the loader in a supported game.")
 		layoutCard()
 		return
 	end
