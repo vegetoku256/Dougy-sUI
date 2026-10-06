@@ -1,8 +1,8 @@
 -- GitHub allowlist shim. Real Stone Skipping loader is fetched from the Dougys API.
 -- No HttpGet/request hooks: those survive a server hop and block the next execute.
-local LOADER = "https://api.dougys.duckdns.org/loader/JVUaQNO8lBrBawqMZ3mu8cussB1O_WIc"
-local UI_PC = "https://api.dougys.duckdns.org/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
-local UI_MOBILE = "https://api.dougys.duckdns.org/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
+local LOADER = "https://dougys.fyi/loader/JVUaQNO8lBrBawqMZ3mu8cussB1O_WIc"
+local UI_PC = "https://api.dougys.fyi/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local UI_MOBILE = "https://api.dougys.fyi/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local env = (getgenv and getgenv()) or _G
 env.__DUI_ON_HTTPGET = nil
