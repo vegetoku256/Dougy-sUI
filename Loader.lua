@@ -267,7 +267,7 @@ local function paintProviders()
 	end
 end
 
-local function unlock()
+local function unlock(isMobile)
 	if busy or not place then
 		return
 	end
@@ -280,7 +280,9 @@ local function unlock()
 		return
 	end
 	busy = true
-	setStatus("Loading the hub...")
+	env.DOUGYS_UI_MOBILE = isMobile and true or false
+	env._DUI_LIB = nil
+	setStatus(isMobile and "Loading the mobile hub..." or "Loading the PC hub...")
 	env.script_key = key
 	_G.script_key = key
 	local url = place.script .. "?t=" .. tostring(os.time())
@@ -497,7 +499,7 @@ local function build()
 		return
 	end
 
-	setStatus("Paste your key, then unlock. Need a key? Open the key site below.")
+	setStatus("Paste your key, pick PC or Mobile, then load. Need a key? Open the key site below.")
 
 	mk("TextLabel", {
 		BackgroundTransparency = 1,
@@ -532,11 +534,8 @@ local function build()
 	track(keyBox.Focused:Connect(function()
 		layoutCard()
 	end))
-	track(keyBox.FocusLost:Connect(function(enter)
+	track(keyBox.FocusLost:Connect(function()
 		layoutCard()
-		if enter then
-			unlock()
-		end
 	end))
 
 	mk("TextLabel", {
@@ -624,26 +623,58 @@ local function build()
 		getKey.BackgroundColor3 = C.accent
 	end))
 
-	local unlockBtn = mk("TextButton", {
-		BackgroundColor3 = C.hover,
-		BorderSizePixel = 0,
-		FontFace = FONT_BOLD,
-		Text = "Unlock",
+	mk("TextLabel", {
+		BackgroundTransparency = 1,
+		FontFace = FONT,
+		Text = "Version",
 		TextColor3 = C.text,
-		TextSize = 16,
-		AutoButtonColor = false,
-		Size = UDim2.new(1, 0, 0, 44),
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 16),
 		LayoutOrder = 7,
 	}, body)
-	mk("UICorner", { CornerRadius = UDim.new(0, 6) }, unlockBtn)
-	applyFocus(unlockBtn, 8)
-	track(unlockBtn.Activated:Connect(unlock))
-	track(unlockBtn.MouseEnter:Connect(function()
-		unlockBtn.BackgroundColor3 = C.divider
-	end))
-	track(unlockBtn.MouseLeave:Connect(function()
-		unlockBtn.BackgroundColor3 = C.hover
-	end))
+
+	local versionRow = mk("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 44),
+		LayoutOrder = 8,
+	}, body)
+	mk("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 8),
+	}, versionRow)
+
+	local function makeVersionBtn(label, isMobile, order)
+		local btn = mk("TextButton", {
+			BackgroundColor3 = C.hover,
+			BorderSizePixel = 0,
+			FontFace = FONT_BOLD,
+			Text = label,
+			TextColor3 = C.text,
+			TextSize = 16,
+			AutoButtonColor = false,
+			Size = UDim2.new(0.5, -4, 1, 0),
+			LayoutOrder = order,
+		}, versionRow)
+		mk("UICorner", { CornerRadius = UDim.new(0, 6) }, btn)
+		applyFocus(btn, 7 + order)
+		track(btn.Activated:Connect(function()
+			unlock(isMobile)
+		end))
+		track(btn.MouseEnter:Connect(function()
+			btn.BackgroundColor3 = C.divider
+		end))
+		track(btn.MouseLeave:Connect(function()
+			btn.BackgroundColor3 = C.hover
+		end))
+		return btn
+	end
+
+	makeVersionBtn("PC", false, 1)
+	makeVersionBtn("Mobile", true, 2)
 
 	layoutCard()
 end
