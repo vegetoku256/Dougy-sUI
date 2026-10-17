@@ -26,6 +26,10 @@ local GAMES = {
 		name = "Stone Skipping",
 		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/SK.lua",
 	},
+	[114326934417838] = {
+		name = "Break and Steal an Egg",
+		script = "https://raw.githubusercontent.com/vegetoku256/Dougy-sUI/refs/heads/main/Games/BSE.lua",
+	},
 }
 
 local PROVIDERS = {
