@@ -5,9 +5,12 @@ end
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
 local env = (getgenv and getgenv()) or _G
 local RUNTIME = "__DougysHubLoader"
+local PREFS_KEY = "__DougysLoaderPrefs"
+local SAVE_PATH = "DougysHub/loader.json"
 
 local GAMES = {
 	[10449761463] = {
@@ -267,11 +270,108 @@ local function paintProviders()
 	end
 end
 
+local function trim(s)
+	return (string.gsub(tostring(s or ""), "^%s*(.-)%s*$", "%1"))
+end
+
+local function savePrefs(key, isMobile)
+	local data = {
+		key = trim(key),
+		mobile = isMobile == true,
+	}
+	env[PREFS_KEY] = data
+	pcall(function()
+		if type(makefolder) == "function" then
+			if not (type(isfolder) == "function" and isfolder("DougysHub")) then
+				makefolder("DougysHub")
+			end
+		end
+		if type(writefile) == "function" then
+			writefile(SAVE_PATH, HttpService:JSONEncode(data))
+		end
+	end)
+end
+
+local function clearAutoLoad()
+	env[PREFS_KEY] = nil
+	pcall(function()
+		if type(delfile) == "function" and type(isfile) == "function" and isfile(SAVE_PATH) then
+			delfile(SAVE_PATH)
+		elseif type(writefile) == "function" then
+			writefile(SAVE_PATH, HttpService:JSONEncode({ key = "", mobile = nil }))
+		end
+	end)
+end
+
+local function loadPrefs()
+	local prefs = { key = "", mobile = nil }
+	local cached = env[PREFS_KEY]
+	if type(cached) == "table" then
+		if type(cached.key) == "string" then
+			prefs.key = trim(cached.key)
+		end
+		if cached.mobile == true or cached.mobile == false then
+			prefs.mobile = cached.mobile
+		end
+	end
+	pcall(function()
+		if type(isfile) ~= "function" or type(readfile) ~= "function" or not isfile(SAVE_PATH) then
+			return
+		end
+		local data = HttpService:JSONDecode(readfile(SAVE_PATH))
+		if type(data) ~= "table" then
+			return
+		end
+		if type(data.key) == "string" and trim(data.key) ~= "" then
+			prefs.key = trim(data.key)
+		end
+		if data.mobile == true or data.mobile == false then
+			prefs.mobile = data.mobile
+		end
+	end)
+	if prefs.key == "" then
+		prefs.key = trim(env.script_key or _G.script_key or "")
+	end
+	return prefs
+end
+
+local function tryLoad(isMobile, key)
+	key = trim(key)
+	if key == "" or busy or not place then
+		return false, "empty"
+	end
+	busy = true
+	env.DOUGYS_UI_MOBILE = isMobile and true or false
+	env._DUI_LIB = nil
+	env.script_key = key
+	_G.script_key = key
+	local ok, srcOrErr = pcall(fetch, place.script .. "?t=" .. tostring(os.time()))
+	if not ok then
+		busy = false
+		return false, "download"
+	end
+	local fn, err = loadstring(srcOrErr, place.name)
+	if not fn then
+		busy = false
+		warn("[Dougy's] compile: " .. tostring(err))
+		return false, "invalid"
+	end
+	local ran, runErr = pcall(fn)
+	if not ran then
+		busy = false
+		warn("[Dougy's] hub failed: " .. tostring(runErr))
+		return false, "invalid"
+	end
+	savePrefs(key, isMobile)
+	busy = false
+	return true
+end
+
 local function unlock(isMobile)
 	if busy or not place then
 		return
 	end
-	local key = keyBox and string.gsub(keyBox.Text or "", "^%s*(.-)%s*$", "%1") or ""
+	local key = keyBox and trim(keyBox.Text) or ""
 	if key == "" then
 		setStatus("Paste your key first.", true)
 		if keyBox then
@@ -279,34 +379,18 @@ local function unlock(isMobile)
 		end
 		return
 	end
-	busy = true
-	env.DOUGYS_UI_MOBILE = isMobile and true or false
-	env._DUI_LIB = nil
 	setStatus(isMobile and "Loading the mobile hub..." or "Loading the PC hub...")
-	env.script_key = key
-	_G.script_key = key
-	local url = place.script .. "?t=" .. tostring(os.time())
-	local ok, srcOrErr = pcall(fetch, url)
-	if not ok then
-		busy = false
+	local ok, reason = tryLoad(isMobile, key)
+	if ok then
+		destroyGui()
+		return
+	end
+	if reason == "download" then
 		setStatus("Could not download the hub. Try again.", true)
-		return
+	else
+		clearAutoLoad()
+		setStatus("Your key isn't valid.", true)
 	end
-	local fn, err = loadstring(srcOrErr, place.name)
-	if not fn then
-		busy = false
-		setStatus("Could not compile the hub. Check your key and try again.", true)
-		warn("[Dougy's] compile: " .. tostring(err))
-		return
-	end
-	local ran, runErr = pcall(fn)
-	if not ran then
-		busy = false
-		setStatus("Could not load the hub. Check your key and try again.", true)
-		warn("[Dougy's] hub failed: " .. tostring(runErr))
-		return
-	end
-	destroyGui()
 end
 
 local function mk(class, props, parent)
@@ -320,7 +404,7 @@ local function mk(class, props, parent)
 	return inst
 end
 
-local function build()
+local function build(savedKey, bootError)
 	local parent = hostParent()
 	if not parent then
 		warn("[Dougy's] no GUI parent")
@@ -499,7 +583,11 @@ local function build()
 		return
 	end
 
-	setStatus("Paste your key, pick PC or Mobile, then load. Need a key? Open the key site below.")
+	if bootError then
+		setStatus(bootError, true)
+	else
+		setStatus("Paste your key, pick PC or Mobile, then load. Need a key? Open the key site below.")
+	end
 
 	mk("TextLabel", {
 		BackgroundTransparency = 1,
@@ -519,7 +607,7 @@ local function build()
 		FontFace = FONT,
 		PlaceholderText = "Paste your key",
 		PlaceholderColor3 = C.textDim,
-		Text = tostring(env.script_key or _G.script_key or ""),
+		Text = tostring(savedKey or env.script_key or _G.script_key or ""),
 		TextColor3 = C.text,
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -679,4 +767,28 @@ local function build()
 	layoutCard()
 end
 
-build()
+if type(env[RUNTIME]) == "function" then
+	pcall(env[RUNTIME])
+elseif typeof(env[RUNTIME]) == "Instance" then
+	pcall(function()
+		env[RUNTIME]:Destroy()
+	end)
+	env[RUNTIME] = nil
+end
+
+local prefs = loadPrefs()
+local bootError = nil
+if place and prefs.key ~= "" and prefs.mobile ~= nil then
+	local ok, reason = tryLoad(prefs.mobile, prefs.key)
+	if ok then
+		return
+	end
+	if reason == "download" then
+		bootError = "Could not download the hub. Try again."
+	else
+		clearAutoLoad()
+		bootError = "Your key isn't valid."
+	end
+end
+
+build(prefs.key, bootError)
