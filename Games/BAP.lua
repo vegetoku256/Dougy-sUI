@@ -1,8 +1,8 @@
 -- GitHub allowlist shim. Real Build a Plane loader is fetched from the Dougys API.
 -- No HttpGet/request hooks: those survive a server hop and block the next execute.
 local LOADER = "https://dougys.fyi/loader/y_rDCMkwr0Ldai6_1Hv8UQyFS04B6prq"
-local UI_PC = "https://api.dougys.fyi/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
-local UI_MOBILE = "https://api.dougys.fyi/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
+local UI_PC = "https://dougys.fyi/ui/hXF-UCRNy1-NR8RFvcc6wCaN52Sx4-xM"
+local UI_MOBILE = "https://dougys.fyi/ui/Q6QhyofwluRSohJgezfv44vU4O4lN-aV"
 
 local env = (getgenv and getgenv()) or _G
 env.__DUI_ON_HTTPGET = nil
@@ -142,26 +142,30 @@ end
 
 local function fetch(u)
 	local fn = nativeReq()
-	if type(fn) ~= "function" then
-		error("BAP: no request()", 0)
+	if type(fn) == "function" then
+		local ok, res = pcall(fn, {
+			Url = u,
+			Method = "GET",
+			Headers = {
+				["User-Agent"] = "Mozilla/5.0",
+				["Accept"] = "*/*",
+			},
+		})
+		if ok then
+			local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
+			local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
+			if good(body) and (not code or code == 200) then
+				return body
+			end
+		end
 	end
-	local ok, res = pcall(fn, {
-		Url = u,
-		Method = "GET",
-		Headers = {
-			["User-Agent"] = "Mozilla/5.0",
-			["Accept"] = "*/*",
-		},
-	})
-	if not ok then
-		error("BAP: request failed: " .. tostring(res), 0)
-	end
-	local body = type(res) == "table" and (res.Body or res.body) or (type(res) == "string" and res or nil)
-	local code = type(res) == "table" and (res.StatusCode or res.status_code or res.Status) or nil
-	if good(body) and (not code or code == 200) then
+	local ok2, body = pcall(function()
+		return game:HttpGet(u)
+	end)
+	if ok2 and good(body) then
 		return body
 	end
-	error("BAP: failed to fetch API: " .. tostring(code or "blocked"), 0)
+	error("BAP: failed to fetch API", 0)
 end
 
 local function prepareUi(src)
@@ -202,13 +206,14 @@ local function run(src)
 end
 
 local loaderSrc = fetch(LOADER)
-local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://api.dougys.duckdns.org"
-local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"')
-local ch = loaderSrc:match('CHALLENGE%s*=%s*"([^"]+)"')
+if isDeny(loaderSrc) then
+	return run(loaderSrc)
+end
+
+local api = loaderSrc:match('API%s*=%s*"([^"]+)"') or "https://dougys.fyi"
+local eid = loaderSrc:match('EXCHANGE%s*=%s*"([^"]+)"') or loaderSrc:match('__lr_eid%s*=%s*"([^"]+)"')
+local ch = loaderSrc:match('CHALLENGE%s*=%s*"([^"]+)"') or loaderSrc:match('__lr_ch%s*=%s*"([^"]+)"')
 if not eid or not ch then
-	if isDeny(loaderSrc) then
-		return run(loaderSrc)
-	end
 	getUi()
 	return run(loaderSrc)
 end
@@ -217,8 +222,30 @@ local key = env.script_key or _G.script_key or ""
 if key == "" then
 	error("missing script_key", 0)
 end
-local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
-local payload = fetch(api .. "/api/v1/sessions/exchange?eid=" .. eid .. "&c=" .. ch .. "&k=" .. key .. "&h=" .. hwid)
+local hwid
+pcall(function()
+	if type(gethwid) == "function" then
+		hwid = gethwid()
+	end
+end)
+if not hwid or hwid == "" then
+	pcall(function()
+		hwid = game:GetService("RbxAnalyticsService"):GetClientId()
+	end)
+end
+hwid = tostring(hwid or "unknown")
+local hs = game:GetService("HttpService")
+local payload = fetch(
+	api
+		.. "/api/v1/sessions/exchange?eid="
+		.. hs:UrlEncode(eid)
+		.. "&c="
+		.. hs:UrlEncode(ch)
+		.. "&k="
+		.. hs:UrlEncode(key)
+		.. "&h="
+		.. hs:UrlEncode(hwid)
+)
 if mobile then
 	payload = "getgenv().DOUGYS_UI_MOBILE=true\n" .. payload
 	payload = string.gsub(payload, "hXF-UCRNy1-NR8RFvcc6wCaN52Sx4%-xM", "Q6QhyofwluRSohJgezfv44vU4O4lN-aV")
